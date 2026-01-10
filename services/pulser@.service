@@ -1,0 +1,23 @@
+[Unit]
+Description=Pulser (%i)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=pvtools
+Group=pvtools
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=-/etc/pv-tools/%i.env
+ExecStart=__APP_DIR__/.venv/bin/python __APP_DIR__/%i_pulser.py
+Restart=always
+RestartSec=2
+# Sofortige Logs (print) im journal
+Environment=PYTHONUNBUFFERED=1
+
+# Optional Hardening (kannst du bei Bedarf entschärfen)
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
