@@ -1,154 +1,176 @@
-# pv-tools (Pulser)
+# lbs-wp-pulsar (Victron/Venus → Shelly Impulse)
 
-Kleines Repo mit 3 Python-Skripten, die aus Victron/Venus (Modbus TCP) Leistungswerte lesen und daraus Impulse per Shelly-Relay erzeugen:
+Kleine Sammlung von Python-Skripten, die **Leistungswerte per Modbus TCP** aus einem Victron/Venus-System lesen
+und daraus **Impulse** erzeugen, indem ein Shelly-Ausgang kurz eingeschaltet wird (Shelly-seitig mit *Auto-Off* konfiguriert).
 
-- `pv_pulser.py`  → PV-Leistung (L1/L2/L3)
-- `house_pulser.py` → Haus-Netto (House - HP - optional Wallbox), mit `USE_WALLBOX=0/1`
-- `wp_pulser.py` → Wärmepumpe (HP) als einzelner Messwert
+Enthaltene Skripte:
 
-Die Konfiguration passiert über ENV-Dateien unter `/etc/pv-tools/*.env` und wird per systemd geladen.
+- `wp_pulser.py`  → Wärmepumpe (HP) als einzelner Messwert (uint32)
+- `pv_pulser.py`  → PV-Leistung L1/L2/L3 (uint16)
+- `house_pulser.py` → Haus-Netto (House - HP - optional Wallbox)
 
-## Voraussetzungen
+Die Services laufen über **systemd** (Template `pulser@.service`) und laden ihre Konfig aus **ENV-Dateien**.
 
-- GitHub Repo (dieses Repo)
-- Zielsystem: Ubuntu (VM)
-- Zugriff auf:
-  - Venus/Victron Modbus TCP (Port 502)
-  - Shelly (Gen1 API: `/relay/<idx>?turn=on`)
+---
 
-## Repo-Struktur (empfohlen)
+## Unterstützte Shelly-Geräte
 
-```
-pv-tools/
-  pv_pulser.py
-  house_pulser.py
-  wp_pulser.py
-  requirements.txt
-  install.sh
-  update.sh
-  uninstall.sh
-  config/
-    pv.env.example
-    house.env.example
-    wp.env.example
-  .gitignore
-  .gitattributes
+Dieses Repo unterstützt zwei API-Varianten:
+
+1. **Shelly UNI (Gen1)** – URL Schema: `/relay/<idx>?turn=on`
+2. **Shelly Plus UNI (Gen2)** – URL Schema: `/rpc/Switch.Set?id=<idx>&on=true`
+
+Wahl per ENV:
+
+```bash
+SHELLY_DEVICE=uni       # Gen1
+SHELLY_DEVICE=plus_uni  # Gen2
 ```
 
-## Windows → GitHub (Kurz)
+Du kannst jederzeit auch manuell überschreiben:
 
-1. Git installieren (PowerShell):
-   ```powershell
-   winget install --id Git.Git -e
-   ```
+```bash
+SHELLY_ON_URL=http://<IP>/...  # komplette URL, wenn du etwas Spezielles brauchst
+```
 
-2. Repo initialisieren & pushen:
-   ```powershell
-   cd C:\pfad\zum\pv-tools
-   git init
-   git branch -M main
-   git add .
-   git commit -m "Initial commit"
-   git remote add origin <DEIN_REPO_URL>
-   git push -u origin main
-   ```
+> Wichtig: Stelle am Shelly-Ausgang **Auto-Off auf ~0.03s (30ms)** ein, damit daraus echte Impulse werden.
 
-**Wichtig:** `.gitattributes` nutzen, damit `.py/.sh` als `LF` gespeichert werden.
+---
 
-## Ubuntu VM Installation
+## Installation (Ubuntu/Debian)
 
-1. Repo klonen:
-   ```bash
-   sudo mkdir -p /opt
-   sudo chown "$USER":"$USER" /opt
-   cd /opt
-   git clone <DEIN_REPO_URL> pv-tools
-   cd pv-tools
-   ```
+### 1) Repo klonen
 
-2. Install ausführen:
-   ```bash
-   chmod +x install.sh update.sh uninstall.sh
-   ./install.sh
-   ```
+```bash
+sudo mkdir -p /opt
+sudo chown "$USER":"$USER" /opt
+cd /opt
+git clone https://github.com/dataklo/lbs-wp-pulsar.git
+cd lbs-wp-pulsar
+```
 
-Der Installer macht:
+### 2) Install ausführen
+
+```bash
+chmod +x install.sh update.sh uninstall.sh
+./install.sh
+```
+
+Der Installer erledigt:
+
 - apt Pakete installieren (`git`, `python3-venv`, `python3-pip`, `ca-certificates`)
-- venv unter `./.venv` anlegen + `pip install -r requirements.txt`
-- system user `pvtools` anlegen
+- Python venv unter `./.venv` anlegen und `pip install -r requirements.txt`
+- system user/group anlegen (Default: `lbspulser`)
 - systemd Template `pulser@.service` installieren
-- Env-Examples aus `config/*.env.example` nach `/etc/pv-tools/*.env` kopieren (nur wenn noch nicht vorhanden)
+- Example-Konfigs nach `/etc/lbs-wp-pulsar/*.env` kopieren (nur falls noch nicht vorhanden)
 - Services für vorhandene `*_pulser.py` aktivieren und starten (pv/house/wp)
+
+**Non-interactive (z.B. per Script):**
+
+```bash
+SHELLY_DEVICE=plus_uni ./install.sh
+```
+
+---
 
 ## Konfiguration
 
-Die echten Konfig-Dateien liegen auf der VM hier:
+Die echten Konfig-Dateien liegen hier:
 
-- `/etc/pv-tools/pv.env`
-- `/etc/pv-tools/house.env`
-- `/etc/pv-tools/wp.env`
+- `/etc/lbs-wp-pulsar/pv.env`
+- `/etc/lbs-wp-pulsar/house.env`
+- `/etc/lbs-wp-pulsar/wp.env`
 
 Nach dem Anpassen:
+
 ```bash
 sudo systemctl restart pulser@pv pulser@house pulser@wp
 ```
 
 ### House: Wallbox optional
 
-In `/etc/pv-tools/house.env`:
+In `/etc/lbs-wp-pulsar/house.env`:
+
 ```bash
-USE_WALLBOX=1   # mitrechnen/abziehen
+USE_WALLBOX=1   # berücksichtigen
 # oder
 USE_WALLBOX=0   # ignorieren
 ```
 
+---
+
 ## Betrieb / Debugging
 
 Status:
+
 ```bash
+systemctl status pulser@wp
 systemctl status pulser@pv
 systemctl status pulser@house
-systemctl status pulser@wp
 ```
 
 Logs live:
+
 ```bash
+journalctl -u pulser@wp -f
 journalctl -u pulser@pv -f
 journalctl -u pulser@house -f
-journalctl -u pulser@wp -f
 ```
+
+---
 
 ## Update (Deploy)
 
 ```bash
-cd /opt/pv-tools
+cd /opt/lbs-wp-pulsar
 ./update.sh
 ```
 
-Das macht:
-- `git pull --ff-only`
-- Python deps updaten
-- systemd reload + Services restart
+---
 
 ## Uninstall
 
 ```bash
-cd /opt/pv-tools
+cd /opt/lbs-wp-pulsar
 ./uninstall.sh
 ```
 
 Optional auch Config löschen:
+
 ```bash
 REMOVE_CONFIG=1 ./uninstall.sh
 ```
 
-Optional auch system user löschen:
+Optional auch den system user löschen:
+
 ```bash
 REMOVE_USER=1 ./uninstall.sh
 ```
 
+---
+
+## Git Workflow (kurz)
+
+Änderungen committen und pushen:
+
+```bash
+git status
+git add -A
+git commit -m "..."
+git push
+```
+
+Auf dem Server aktualisieren:
+
+```bash
+cd /opt/lbs-wp-pulsar
+./update.sh
+```
+
+---
+
 ## Sicherheit / Hinweise
 
-- Config liegt bewusst unter `/etc/pv-tools` und nicht im Repo.
-- Services laufen als system user `pvtools`.
-- Wenn du Probleme mit Zugriffsrechten hast: `ls -la /opt/pv-tools` und prüfen, ob die Gruppe `pvtools` lesend/executing Zugriff hat.
+- Config liegt bewusst unter `/etc/lbs-wp-pulsar` und nicht im Repo.
+- Services laufen als system user (Default `lbspulser`).
+- Wenn du Berechtigungsprobleme hast: `ls -la /opt/lbs-wp-pulsar` und prüfen, ob Gruppe `lbspulser` Leserechte hat.
